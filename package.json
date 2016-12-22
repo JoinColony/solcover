@@ -16,6 +16,7 @@
     "istanbul": "^0.4.5",
     "shelljs": "^0.7.4",
     "solidity-parser": "git+https://github.com/ConsenSys/solidity-parser.git#master",
+    "web3": "^0.17.0-beta",
     "yargs": "^6.5.0"
   },
   "devDependencies": {
