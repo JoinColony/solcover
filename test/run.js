@@ -123,7 +123,7 @@ describe('run', () => {
     // Run test that passes otherwise
     assert(pathExists('./coverage') === false, 'should start without: coverage');
     assert(pathExists('./coverage.json') === false, 'should start without: coverage.json');
-    mock.install('Empty.sol', 'Empty.js');
+    mock.install('Empty.sol', 'empty.js');
 
     shell.exec(script);
     assert(shell.error() !== null, 'script should error');
