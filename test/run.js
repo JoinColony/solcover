@@ -1,3 +1,5 @@
+'use strict'
+
 const assert = require('assert');
 const shell = require('shelljs');
 const fs = require('fs');

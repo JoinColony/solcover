@@ -1,3 +1,4 @@
+'use strict'
 /*
   This file contains utilities for generating a mock truffle project to test solcover's
   run script against.

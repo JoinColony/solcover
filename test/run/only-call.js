@@ -1,3 +1,5 @@
+'use strict'
+
 contract('OnlyCall', (accounts) => {
   it('should return 5', () => {
     const onlyCall = OnlyCall.deployed();
