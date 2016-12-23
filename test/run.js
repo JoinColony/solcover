@@ -10,7 +10,7 @@ const mock = require('./util/mockTruffle.js');
 function pathExists(path) { return shell.test('-e', path); }
 
 describe('run', () => {
-  const script = 'node ./runCoveredTests --dir "./mock" --silent "true"';
+  const script = 'node ./runCoveredTests --dir "./mock" --silent';
 
   before(() => {
     mock.initialize(shell);

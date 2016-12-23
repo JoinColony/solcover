@@ -55,7 +55,7 @@ function cleanUp(err) {
 // PAtch our local testrpc if necessary
 if (!shell.test('-e', './node_modules/ethereumjs-vm/lib/opFns.js.orig')) {
   Console.log('patch local testrpc...');
-  shell.exec(`patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch ${silence}`);
+  shell.exec(`patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch`);
 }
 
 // Run the modified testrpc with large block limit, on (hopefully) unused port
