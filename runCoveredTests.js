@@ -49,7 +49,8 @@ function cleanUp(err) {
   shell.config.silent = true;
   shell.rm('-Rf', `${coverageDir}`);
   shell.rm('./allFiredEvents');
-  testrpcProcess.kill();
+  if (testrpcProcess)
+    testrpcProcess.kill();
 
   if (err) {
     Console.log(`${err}\nExiting without generating coverage...`);
@@ -59,22 +60,23 @@ function cleanUp(err) {
   }
 }
 
-// Patch our local testrpc if necessary
-if (!shell.test('-e', './node_modules/ethereumjs-vm/lib/opFns.js.orig')) {
-  Console.log('Patch local testrpc...');
-  shell.exec('patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch');
+// Patch our local testrpc if necessary & Run the modified testrpc with large block limit, 
+// on (hopefully) unused port. Changes here should be also be added to the before() block
+// of test/run.js
+if (!argv.norpc){
+  if (!shell.test('-e', './node_modules/ethereumjs-vm/lib/opFns.js.orig')) {
+    Console.log('Patch local testrpc...');
+    shell.exec('patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch');
+  }
+  Console.log(`Launching testrpc on port ${port}`);
+  try {
+    const command = `./node_modules/ethereumjs-testrpc/bin/testrpc --gasLimit 0xfffffffffff --port ${port}`;
+    testrpcProcess = childprocess.exec(command);
+  } catch (err) {
+    const msg = `There was a problem launching testrpc: ${err}`;
+    cleanUp(msg);
+  }
 }
-
-// Run the modified testrpc with large block limit, on (hopefully) unused port
-Console.log(`Launching testrpc on port ${port}`);
-try {
-  const command = `./node_modules/ethereumjs-testrpc/bin/testrpc --gasLimit 0xfffffffffff --port ${port}`;
-  testrpcProcess = childprocess.exec(command);
-} catch (err) {
-  const msg = `There was a problem launching testrpc: ${err}`;
-  cleanUp(msg);
-}
-
 // Generate a copy of the target truffle project configured for solcover.
 // NB: the following assumes that the target's truffle.js doesn't specify a custom build with an
 // atypical directory structure or depend on the options solcover will change: port, gasLimit,
