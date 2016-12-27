@@ -10,12 +10,28 @@ const mock = require('./util/mockTruffle.js');
 function pathExists(path) { return shell.test('-e', path); }
 
 describe('run', () => {
-  const script = 'node ./runCoveredTests --dir "./mock" --silent';
+  
+  let script;
+  let port = 8554;
 
   before(() => {
     mock.initialize(shell);
     mock.protectCoverage();
   });
+
+  beforeEach(() => {
+    // This hack - passing testrpc a different port each time the script is run -
+    // is necessary to get tests to pass on CircleCI (Ubuntu). Without
+    // it Truffle crashes with a non-descript socket hangup error originating 
+    // in web3 for each test after the first, suggesting the childprocess testrpc is not 
+    // getting shut down, or port 8555 isn't immediately available, or...? 
+    // It *is* getting killed as the script exits, and the tests run fine without hack on OSX. 
+    // It's possible Linux users will experience problems if they run coverage 
+    // twice in a row. It's also possible this is a quirk of the container or test timing or...    
+    port++;
+    script = `node ./runCoveredTests --dir "./mock" --silent --port ${port}`;
+  })
+
   after(() => {
     mock.restoreCoverage();
   });
@@ -45,14 +61,8 @@ describe('run', () => {
     assert(produced[path].fnMap['2'].name === 'getX', 'coverage.json should map "getX"');
   });
 
-  it('background testpc running: should succeed', () => {
-    // This test needs changes to the CI script to work correctly.
-    // Launch a globally installed, upatched testrpc.
-    // const command = './testrpc';
-    // const testrpc = childprocess.exec(command);
-
-    // Run against contract that only uses method.call. If the unpatched testrpc intercepts
-    // truffle then no events will be fired & solcover should fail.
+  it('contract only uses .call: should generate coverage, cleanup & exit(0)', () => {
+    // Run against contract that only uses method.call. 
     assert(pathExists('./coverage') === false, 'should start without: coverage');
     assert(pathExists('./coverage.json') === false, 'should start without: coverage.json');
     mock.install('OnlyCall.sol', 'only-call.js');
@@ -65,14 +75,13 @@ describe('run', () => {
     const produced = JSON.parse(fs.readFileSync('./coverage.json', 'utf8'));
     const path = Object.keys(produced)[0];
     assert(produced[path].fnMap['1'].name === 'getFive', 'coverage.json should map "getFive"');
-    // testrpc.kill();
   });
 
-  it('truffle tests failing: should succeed', () => {
+  it('truffle tests failing: should generate coverage, cleanup & exit(0)', () => {
     assert(pathExists('./coverage') === false, 'should start without: coverage');
     assert(pathExists('./coverage.json') === false, 'should start without: coverage.json');
 
-    // Run with Simple.sol and a legitimate test failure
+    // Run with Simple.sol and a failing assertion in a truffle test
     mock.install('Simple.sol', 'truffle-test-fail.js');
     shell.exec(script);
 
@@ -86,7 +95,7 @@ describe('run', () => {
     assert(produced[path].fnMap['2'].name === 'getX', 'coverage.json should map "getX"');
   });
 
-  it('contract deployment exceeds normal block gasLimit: should succeed', () => {
+  it('deployment cost > block gasLimit: should generate coverage, cleanup & exit(0)', () => {
     // Just making sure Expensive.sol compiles and deploys here.
     mock.install('Expensive.sol', 'block-gas-limit.js');
     shell.exec(script);
@@ -117,10 +126,11 @@ describe('run', () => {
     assert(shell.error() !== null, 'script should error');
     assert(pathExists('./coverage') !== true, 'script should NOT gen coverage folder');
     assert(pathExists('./coverage.json') !== true, 'script should NOT gen coverage.json');
+
   });
 
   it('no events log produced: should generate NO coverage, cleanup and exit(1)', () => {
-    // Run test that passes otherwise
+    // Run contract and test that pass but fire no events
     assert(pathExists('./coverage') === false, 'should start without: coverage');
     assert(pathExists('./coverage.json') === false, 'should start without: coverage.json');
     mock.install('Empty.sol', 'empty.js');

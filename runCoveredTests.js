@@ -13,6 +13,7 @@ const coverage = {};
 const Console = {};
 const coverageDir = './coverageEnv'; 
 let workingDir = './..';
+let port = 8555;
 let testrpcProcess = null;
 let events = null;
 let silence = '';
@@ -25,9 +26,14 @@ if (argv.dir) {
 // Set log level
 if (argv.silent) {
   Console.log = () => {};
-  silence = '&>/dev/null';
+  silence = '> /dev/null 2>&1';
 } else {
   Console.log = console.log;
+}
+
+// Set testrpc/truffle port
+if (argv.port){
+  port = argv.port;
 }
 
 // Get target truffle config to modify for solCover
@@ -39,29 +45,30 @@ const truffleConfig = require(`${workingDir}/truffle.js`);
  * @param  {String} err error message
  */
 function cleanUp(err) {
+  Console.log('Cleaning up...');
   shell.config.silent = true;
   shell.rm('-Rf', `${coverageDir}`);
   shell.rm('./allFiredEvents');
   testrpcProcess.kill();
 
   if (err) {
-    Console.log(`${err}\nexiting without generating coverage...`);
+    Console.log(`${err}\nExiting without generating coverage...`);
     process.exit(1);
   } else {
     process.exit(0);
   }
 }
 
-// PAtch our local testrpc if necessary
+// Patch our local testrpc if necessary
 if (!shell.test('-e', './node_modules/ethereumjs-vm/lib/opFns.js.orig')) {
-  Console.log('patch local testrpc...');
-  shell.exec(`patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch`);
+  Console.log('Patch local testrpc...');
+  shell.exec('patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch');
 }
 
 // Run the modified testrpc with large block limit, on (hopefully) unused port
-Console.log('launching testrpc on port 8555');
+Console.log(`Launching testrpc on port ${port}`);
 try {
-  const command = './node_modules/ethereumjs-testrpc/bin/testrpc --gasLimit 0xfffffffffff --port 8555';
+  const command = `./node_modules/ethereumjs-testrpc/bin/testrpc --gasLimit 0xfffffffffff --port ${port}`;
   testrpcProcess = childprocess.exec(command);
 } catch (err) {
   const msg = `There was a problem launching testrpc: ${err}`;
@@ -72,9 +79,9 @@ try {
 // NB: the following assumes that the target's truffle.js doesn't specify a custom build with an
 // atypical directory structure or depend on the options solcover will change: port, gasLimit,
 // gasPrice.
-Console.log('generating coverage environment');
+Console.log('Generating coverage environment');
 
-truffleConfig.rpc.port = 8555;
+truffleConfig.rpc.port = port;
 truffleConfig.rpc.gas = 0xfffffff;
 truffleConfig.rpc.gasPrice = 20e9;
 
@@ -89,7 +96,7 @@ fs.writeFileSync(`${coverageDir}/truffle.js`, `module.exports = ${JSON.stringify
 try {
   shell.ls(`${coverageDir}/contracts/*.sol`).forEach((file) => {
     if (file !== `${coverageDir}/contracts/Migrations.sol`) {
-      Console.log('instrumenting ', file);
+      Console.log('Instrumenting ', file);
       const contract = fs.readFileSync(`./${file}`).toString();
       const fileName = path.basename(file);
       const instrumentedContractInfo = getInstrumentedVersion(contract, fileName, true);
@@ -127,27 +134,31 @@ try {
   cleanUp(err);
 }
 
+// Run truffle test on instrumented contracts
 try {
-  Console.log('launching Truffle (this can take a few seconds)...');
-  shell.exec(`cd coverageEnv && truffle test --network coverage ${silence}`);
-} catch (err) {
+  Console.log('Launching Truffle (this can take a few seconds)...');
+  const command = `cd coverageEnv && truffle test --network coverage ${silence}`;
+  shell.exec(command);
+} catch (err){
   cleanUp(err);
 }
 
+// Get events fired during instrumented contracts execution.
 try {
   events = fs.readFileSync('./allFiredEvents').toString().split('\n');
 } catch (err) {
   const msg =
   `
     There was an error generating coverage. Possible reasons include:
-    1. Another application is using port 8555 
+    1. Another application is using port ${port} 
     2. Truffle crashed because your tests errored
     
   `;
   cleanUp(msg + err);
 }
 
-Console.log('generating coverage report');
+// Generate coverage report from events logs
+Console.log('Generating coverage report');
 for (let idx = 0; idx < events.length - 1; idx++) {
   // The limit here isn't a bug - there is an empty line at the end of this file, so we don't
   // want to go to the very end of the array.
@@ -171,6 +182,10 @@ for (let idx = 0; idx < events.length - 1; idx++) {
   }
 }
 
+// Write coverage report / run istanbul
 fs.writeFileSync('./coverage.json', JSON.stringify(coverage));
 shell.exec(`./node_modules/istanbul/lib/cli.js report html ${silence}`);
+
+// Finish
 cleanUp();
+  
