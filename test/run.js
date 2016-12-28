@@ -6,6 +6,8 @@ const fs = require('fs');
 const childprocess = require('child_process');
 const mock = require('./util/mockTruffle.js');
 
+let launchTestRpc = false;
+
 // shell.test alias for legibility
 function pathExists(path) { return shell.test('-e', path); }
 
@@ -19,22 +21,26 @@ describe('run', () => {
 
   let port = 8555;
   let testrpcProcess = null;
-  let script = `node ./runCoveredTests --dir "./mock" --port ${port} --norpc --silent`;
+  let script = `node ./runCoveredTests --dir "./mock" --port ${port} --silent`;
   
   before(() => {
     mock.protectCoverage();
-
-    // Launch patched testrpc from test - CI (Ubuntu) doesn't seem to be freeing  
-    // server resources until the parent process of these tests exits so there are errors launching
-    // testrpc repeatedly on the same port. runCoveredTests script gets passed a --norpc 
-    // flag which skips the testrpc launch there. It's important this be **the same code** that
-    // runs in the script - otherwise the patch isn't getting checked.  
-    if (!shell.test('-e', './node_modules/ethereumjs-vm/lib/opFns.js.orig')) {
-      shell.exec('patch -b ./node_modules/ethereumjs-vm/lib/opFns.js ./hookIntoEvents.patch');
-    }
-    const command = `./node_modules/ethereumjs-testrpc/bin/testrpc --gasLimit 0xfffffffffff --port ${port}`;
-    testrpcProcess = childprocess.exec(command);
   });
+
+  beforeEach(() => {
+    // CI (Ubuntu) doesn't seem to be freeing  server resources until the parent process of these 
+    // tests exits so there are errors launching testrpc repeatedly on the same port. Tests #2 through
+    // #last will use this instance of testrpc (port 8557). Test #1 uses the instance launched by 
+    // the run script (which also installs the patch). This allows us to end run CI container issues
+    // AND verify that the script actually works. 
+    if (launchTestRpc){
+      port = 8557;
+      script = `node ./runCoveredTests --dir "./mock" --port ${port} --silent --norpc`;
+      const command = `./node_modules/ethereumjs-testrpc/bin/testrpc --gasLimit 0xfffffffffff --port ${port}`;
+      testrpcProcess = childprocess.exec(command);
+      launchTestRpc = false;
+    }
+  })
 
   after(() => {
     mock.restoreCoverage();
@@ -45,7 +51,10 @@ describe('run', () => {
     mock.remove();
   });
 
+  // This test should be positioned first in the suite because of the way testrpc is 
+  // launched for these tests.
   it('simple contract: should generate coverage, cleanup & exit(0)', () => {
+    
     // Directory should be clean
     assert(pathExists('./coverage') === false, 'should start without: coverage');
     assert(pathExists('./coverage.json') === false, 'should start without: coverage.json');
@@ -65,7 +74,8 @@ describe('run', () => {
     const path = Object.keys(produced)[0];
     assert(produced[path].fnMap['1'].name === 'test', 'coverage.json should map "test"');
     assert(produced[path].fnMap['2'].name === 'getX', 'coverage.json should map "getX"');
-    collectGarbage(); 
+    collectGarbage();
+    launchTestRpc = true; // Toggle flag to launch a single testrpc instance for rest of tests. 
   });
 
   it('contract only uses .call: should generate coverage, cleanup & exit(0)', () => {
