@@ -331,10 +331,7 @@ module.exports = function(contract, fileName, instrumentingActive){
 		}
 
 		for (x in expression.body){
-			// Ignore top-level variable declarations grouped together in array by solidity-parser
-			if (!Array.isArray(expression.body[x])){
-				parse[expression.body[x].type](expression.body[x], instrument);
-			}
+			parse[expression.body[x].type](expression.body[x], instrument);
 		}
 	}
 
@@ -425,6 +422,9 @@ module.exports = function(contract, fileName, instrumentingActive){
 	}
 
 	parse["BreakStatement"] = function(expression, instrument){
+	}
+
+	parse["StateVariableDeclaration"] = function(expression, instrument){
 	}
 
 	var instrumented = parse[result.type](result);
